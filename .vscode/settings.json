@@ -1,0 +1,21 @@
+{
+  "files.associations": {
+    "tuple": "cpp",
+    "iostream": "cpp",
+    "deque": "cpp",
+    "forward_list": "cpp",
+    "list": "cpp",
+    "string": "cpp",
+    "vector": "cpp",
+    "regex": "cpp",
+    "ratio": "c",
+    "datastructure.h": "c",
+    "stdlib.h": "c"
+  },
+  "explorer.sortOrder": "type",
+  "files.exclude": {
+    "**/*.o": true,
+    "**/*.dSYM": true
+  },
+  "C_Cpp.errorSquiggles": "disabled"
+}

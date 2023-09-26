@@ -1,0 +1,56 @@
+{
+  "version": "2.0.0",
+  "runner": "terminal",
+  "type": "shell",
+  "echoCommand": true,
+  "presentation": {
+    "reveal": "always"
+  },
+  "tasks": [
+    {
+      "label": "execute",
+      "command": "cmd",
+      "group": "test",
+      "args": ["/C", "${fileDirname}\\${fileBasenameNoExtension}"]
+    },
+    {
+      "type": "cppbuild",
+      "label": "C/C++: g++.exe 활성 파일 빌드",
+      "command": "C:\\cygwin64\\bin\\g++.exe",
+      "args": [
+        "-fdiagnostics-color=always",
+        "-g",
+        "${fileDirname}\\**.cpp",
+        "-o",
+        "${fileDirname}\\${fileBasenameNoExtension}.exe"
+      ],
+      "options": {
+        "cwd": "C:\\cygwin64\\bin"
+      },
+      "problemMatcher": ["$gcc"],
+      "group": "build",
+      "detail": "컴파일러: C:/cygwin64/bin/x86_64-w64-mingw32-gcc.exe"
+    },
+    {
+      "type": "shell",
+      "label": "C/C++: gcc.exe 활성 파일 빌드",
+      "command": "C:\\cygwin64\\bin\\gcc.exe",
+      "args": [
+        "-fdiagnostics-color=always",
+        "-g",
+        "${fileDirname}/**.c",
+        "-o",
+        "${fileDirname}\\${fileBasenameNoExtension}.exe"
+      ],
+      "options": {
+        "cwd": "C:\\cygwin64\\bin"
+      },
+      "problemMatcher": ["$gcc"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "detail": "디버거에서 생성된 작업입니다."
+    }
+  ]
+}
