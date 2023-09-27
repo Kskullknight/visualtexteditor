@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <sys/ioctl.h>
+#include <string.h>
 
 /*** defines ***/
 
@@ -25,7 +26,6 @@
 /*** data ***/
 
 // struct termios orig_termios;
-
 /*
 * 편집기의 정보를 담는 전역 변수 구조체를 생성
 */
@@ -188,7 +188,7 @@ int getWindowSize(int *rows, int *cols){
 
     // ioctl이 작동하지 않을 경우 두번째 방법을 어떻게 작동하는지 확인하기 우하여 1을 테스트를 위해 추가
     // 커서가 오른쪽 아래로 이동하고 키를 입력하자 오류가 발생
-    if(1 || ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0){
+    if(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0){
         // ioctl이 모든 시스탬에서 창의 크기를 요청 할 수 있다는 보장이 없기 때문에 다른 방법을 이용
         /*
         * C(Cursor Forward)는 커서를 오른쪽으로 이동하고 B(Cursor Down)명령은 커서를 아래로 이동합니다.
@@ -207,7 +207,29 @@ int getWindowSize(int *rows, int *cols){
     
 }
 
+/*** append buffer ***/
+// 이 버퍼는 
+struct abuf
+{
+    char *b;
+    int len;
+};
 
+// 빈 버퍼를 나타내는 상수
+#define ABUF_INT {NULL, 0}
+
+void abAppend(struct abuf *ab, const char *s, int len) {
+    char *new = realloc(ab->b, ab->len + len)
+
+    if (new == NULL) return;
+    memcpy(&new[ab->len], s, len);
+    ab->b = new;
+    ab->len += len;
+}
+
+void abFree(struct abuf *ab) {
+    free(ab->b);
+}
 
 /*** input ***/
 
@@ -243,7 +265,11 @@ void editorDrawRows(){
 
     int y;
     for (y = 0; y < E.screenrows; y++){
-        write(STDOUT_FILENO, "~\r\n", 3);
+        write(STDOUT_FILENO, "~", 1);
+
+        if (y < E.screenrows - 1){
+            write(STDOUT_FILENO, "\r\n", 2);
+        }
     }
 }
 
@@ -280,8 +306,6 @@ void editorRefreshScreen(){
 
    write(STDOUT_FILENO, "\x1b[H", 3);
 }
-
-
 
 /*** init ***/
 
