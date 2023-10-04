@@ -20,7 +20,7 @@
 #include <string.h>
 
 /*** defines ***/
-
+#define KILO_VERSION "0.0.1"
 #define CTRL_KEY(k) ((k) & 0x1f)    // 앞 3비트를 0으로 만들겠다. 앞 3비트를 지우면 패리티비트와 7번, 6번 비트가 사라지는데 이러면 대소문자를 구분하지 않는다.
 
 /*** data ***/
@@ -219,15 +219,15 @@ struct abuf
 #define ABUF_INT {NULL, 0}
 
 void abAppend(struct abuf *ab, const char *s, int len) {
-    char *new = realloc(ab->b, ab->len + len)
+    char *new = realloc(ab->b, ab->len + len); // 할당된 메모리의 크기를 변화 연속된 메모리를 잡을 수 없을 경우 새로운 주소를 반환
 
     if (new == NULL) return;
-    memcpy(&new[ab->len], s, len);
+    memcpy(&new[ab->len], s, len);  // 버퍼에 있는 문자를 매개변수로 들어온 s에 복사
     ab->b = new;
     ab->len += len;
 }
 
-void abFree(struct abuf *ab) {
+void abFree(struct abuf *ab) {  // 동적 메모리를 지우는 함수
     free(ab->b);
 }
 
@@ -254,7 +254,7 @@ void editorProcessKeyPress(){
 
 /*** output ***/
 
-void editorDrawRows(){
+void editorDrawRows(struct abuf *ab){
     /*
     * 편집 중인 텍스트 버퍼에 각 행 그리기를 처리 합니다. 
     * 지금은 각 행에 물결을 그립니다.
@@ -265,10 +265,38 @@ void editorDrawRows(){
 
     int y;
     for (y = 0; y < E.screenrows; y++){
-        write(STDOUT_FILENO, "~", 1);
 
+        if (y == E.screenrows / 3){
+            char welcome[80];
+            int welcomelen = snprintf(welcome, sizeof(welcome), "Kilo editor -- version %s", KILO_VERSION);
+            if (welcomelen > E.screenrows){
+                welcomelen = E.screencols;
+            }
+            int padding = (E.screencols - welcomelen) / 2;
+            if (padding){
+                abAppend(ab, "~", 1);
+                padding--;
+            }
+            while (padding--)
+            {
+                abAppend(ab, " ", 1);
+            }
+            
+            abAppend(ab, welcome, welcomelen);
+        }else{
+            abAppend(ab, "~", 1);
+        }
+
+
+
+        // write(STDOUT_FILENO, "~", 1); 애래로 대체
+        // abAppend(ab, "~", 1);    위로 이동
+
+        abAppend(ab, "\x1b[K", 3); // 현재 줄을 지우는 명령어 J의 경우 2는 전체를 지우고 1은 커서 왼쪽에 있는 줄의 부분을 지우고 0은 커서의 오른쪽에 있는 줄의 부분을 지운다.
+        // K의 기본 인수는 0이고 
         if (y < E.screenrows - 1){
-            write(STDOUT_FILENO, "\r\n", 2);
+            // write(STDOUT_FILENO, "\r\n", 2);
+            abAppend(ab, "\r\n", 2);
         }
     }
 }
@@ -289,7 +317,7 @@ void editorRefreshScreen(){
     * <esc>[0J는 커서부터 화며 끝까지 지웁니다 0은 기본 인수 이므로  <esc>[J와 동일한 명령이다.
     */
 
-    write(STDOUT_FILENO, "\x1b[2J", 4); 
+    // write(STDOUT_FILENO, "\x1b[2J", 4); 
 
     /*
     * <esc>[2J는 화면 중간에 커서를 남긴다.
@@ -300,12 +328,38 @@ void editorRefreshScreen(){
     * H명령의 커서를 이동시킬 행과 열의 번호를 두개의 인수로 사용한다. ex) <esc>[12;40H
     * 기본인수가 둘 다 1이다. (행과 열번호는 0이 아닌 1부터 시작한다.) 
     */
-   write(STDOUT_FILENO, "\x1b[H", 3);
+    //    write(STDOUT_FILENO, "\x1b[H", 3);
 
-   editorDrawRows();
+    //    editorDrawRows();
 
-   write(STDOUT_FILENO, "\x1b[H", 3);
+    //    write(STDOUT_FILENO, "\x1b[H", 3);
+
+
+    /*
+    * 위 부분을 대체된 부분
+    *  화면을 새로 고침할 때마다 비어있는 새로운 버퍼를 만듬
+    * 버퍼에 있는 내용을 write함수를 이용하여 내보고
+    * 버퍼를 지움
+    */
+
+    struct abuf ab = ABUF_INT;
+
+    // h와 ㅣ은 다양한 터미널의 모드를 켜고 끄는 명령어 이다 ?25의 경우 마우스 커서를 끄고 켠다.
+    abAppend(&ab, "\x1b[?25l", 6);  
+    // abAppend(&ab, "\x1b[2J", 4); 모든 줄을 지우는 [2J 대신 한 줄만 변경  abAppend(ab, "\x1b[K", 3);
+    abAppend(&ab, "\x1b[H", 3);
+
+    editorDrawRows(&ab);
+
+    abAppend(&ab, "\x1b[H", 3);
+    abAppend(&ab, "\x1b[?25h", 6);
+
+
+    write(STDOUT_FILENO, ab.b, ab.len);
+    abFree(&ab);
 }
+
+
 
 /*** init ***/
 
