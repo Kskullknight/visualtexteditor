@@ -30,6 +30,8 @@
 * 편집기의 정보를 담는 전역 변수 구조체를 생성
 */
 struct editorConfig {
+    int cx, cy; // 커서의 위치를 변수
+
     struct termios orig_termios;
 
     int screenrows;
@@ -37,8 +39,6 @@ struct editorConfig {
 };
 
 struct editorConfig E;
-
-
 
 /*** terminal ***/
 
@@ -233,6 +233,27 @@ void abFree(struct abuf *ab) {  // 동적 메모리를 지우는 함수
 
 /*** input ***/
 
+/*
+* 키보드의 뱡향키를 누르면 커서의 위치가 바뀌도록 하는 함수
+*/
+void editorMoveCursor(char key){
+    switch (key)
+    {
+    case 'a':
+        E.cx--;
+        break;
+    case 'd':
+        E.cx++;
+        break;
+    case 'w':
+        E.cy--;
+        break;
+    case 's':
+        E.cy++;
+        break;
+    }
+}
+
 void editorProcessKeyPress(){
     /*
     * 키 누르기를 기다린 다음을 처리
@@ -249,8 +270,16 @@ void editorProcessKeyPress(){
         write(STDOUT_FILENO, "\x1b[H", 3);
         exit(0);
         break;
+    case 'w':
+    case 'a':
+    case 's':
+    case 'd':
+        editorMoveCursor(c);
+        break;
     }
 }
+
+
 
 /*** output ***/
 
@@ -351,7 +380,11 @@ void editorRefreshScreen(){
 
     editorDrawRows(&ab);
 
-    abAppend(&ab, "\x1b[H", 3);
+    // abAppend(&ab, "\x1b[H", 3);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1);  // 화면을 새로고침 할 때 커서의 위치를 이동
+    abAppend(&ab, buf, strlen(buf));
+
     abAppend(&ab, "\x1b[?25h", 6);
 
 
@@ -359,11 +392,13 @@ void editorRefreshScreen(){
     abFree(&ab);
 }
 
-
-
 /*** init ***/
 
 void initEditor(){
+    //  커서위치를 초기화
+    E.cx = 0;
+    E.cy = 0;
+
     /*
     * 화면의 크기를 정보를 받아오는 함수
     */
@@ -399,4 +434,3 @@ int main(){
 
     return 0;
 }
-
