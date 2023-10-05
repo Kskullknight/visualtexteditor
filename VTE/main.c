@@ -21,7 +21,22 @@
 
 /*** defines ***/
 #define KILO_VERSION "0.0.1"
+
 #define CTRL_KEY(k) ((k) & 0x1f)    // 앞 3비트를 0으로 만들겠다. 앞 3비트를 지우면 패리티비트와 7번, 6번 비트가 사라지는데 이러면 대소문자를 구분하지 않는다.
+
+enum editorKey{
+    // char type의 경우 저장 범위가 작아서 오버플로우가 될수 있으음으로 int 타입으로 변경한다
+    // ARROW_LEFT = 'a',
+    // ARROW_RIGHT = 'd',
+    // ARROW_UP = 'w',
+    // ARROW_DOWN = 's'
+
+    // 열거형의 경우 처음이 1000이 되면 자동으로 다음에 오는 변수는 1씩 증가한다.
+    ARROW_LEFT = 1000,  // 1000
+    ARROW_RIGHT,        // 1001
+    ARROW_UP,           // 1002
+    ARROW_DOWN          // 1003
+};
 
 /*** data ***/
 
@@ -113,7 +128,8 @@ void enableRawMode(){
     // 프로그램이 종료되면 읽지 않은 입력은 모두 삭제된다.
 }
 
-char editorReadKey(){   
+int editorReadKey(){   
+// char editorReadKey(){       
     /*
     * 키가 한번 눌리떄까지 기다렸다가 입력한 키를 반환하는 것 
     * 확장하여 이 함수를 확장하여 화살표 키의 경우 처럼 단일 키 누르기를 나타내는 여러 바이트를 읽는 이스케이프 시퀀스를 처리 
@@ -121,11 +137,53 @@ char editorReadKey(){
 
     int nread;
     char c;
-    while((nread = read(STDIN_FILENO, &c, 1)) != 1){
+
+    /*
+    * 한 문자씩 읽어서 c에 저장한다.
+    * read는 읽은 문자수를 반환하는 1이면 계속 진행하고
+    * 아니면 에러를 확인하고 프로그램을 종료한다.
+    */
+    while((nread = read(STDIN_FILENO, &c, 1)) != 1){    
         if (nread == -1 && errno != EAGAIN) {
             die("read");
         }
     }
+
+
+    if(c=='\x1b'){                                  // 만약 C가 이스케이프 문자이면
+        char seq[3];
+
+        if (read(STDIN_FILENO, &seq[0], 1) != 1)    // 이스케이프 문자이후 오는 한 문자를 읽음
+        {
+            return '\x1b';
+        }
+
+        if (read(STDIN_FILENO, &seq[1], 1) != 1)    // 이스케이프 이후에 오는 한 문자를 읽음
+        {
+            return '\x1b';
+        }
+
+        if(seq[0] == '['){                          // 이스케이프 문자중 명령 문자이면
+            switch (seq[1])                         // 뒤에 오는 인수에 따라 어떠화살표인지 매칭
+            {
+            // 위 쪽의 enum을 이용하여 변경
+            // case 'A': return 'w';
+            // case 'B': return 's';
+            // case 'C': return 'd';
+            // case 'D': return 'a';
+            case 'A': return ARROW_UP;
+            case 'B': return ARROW_DOWN;
+            case 'C': return ARROW_RIGHT;
+            case 'D': return ARROW_LEFT;
+            }
+        }
+        
+        return '\x1b';
+    }else
+    {
+        return c;
+    }
+    
     return c;
 }
 
@@ -236,19 +294,33 @@ void abFree(struct abuf *ab) {  // 동적 메모리를 지우는 함수
 /*
 * 키보드의 뱡향키를 누르면 커서의 위치가 바뀌도록 하는 함수
 */
-void editorMoveCursor(char key){
+void editorMoveCursor(int key){
+// void editorMoveCursor(char key){
     switch (key)
     {
-    case 'a':
+    // 위 쪽의 enum을 이용하여 변경
+    // case 'a':
+    //     E.cx--;
+    //     break;
+    // case 'd':
+    //     E.cx++;
+    //     break;
+    // case 'w':
+    //     E.cy--;
+    //     break;
+    // case 's':
+    //     E.cy++;
+    //     break;
+    case ARROW_LEFT:
         E.cx--;
         break;
-    case 'd':
+    case ARROW_RIGHT:
         E.cx++;
         break;
-    case 'w':
+    case ARROW_UP:
         E.cy--;
         break;
-    case 's':
+    case ARROW_DOWN:
         E.cy++;
         break;
     }
@@ -261,7 +333,8 @@ void editorProcessKeyPress(){
     * 다른 입력이 가능한 키는 텍스트에 삽입한다.
     */
 
-    char c = editorReadKey();
+   int c = editorReadKey();
+    // char c = editorReadKey();
 
     switch (c){
     case CTRL_KEY('q'):
@@ -270,10 +343,15 @@ void editorProcessKeyPress(){
         write(STDOUT_FILENO, "\x1b[H", 3);
         exit(0);
         break;
-    case 'w':
-    case 'a':
-    case 's':
-    case 'd':
+    // 위 쪽의 enum을 이용하여 변경
+    // case 'w':
+    // case 'a':
+    // case 's':
+    // case 'd':
+    case ARROW_UP:
+    case ARROW_DOWN:
+    case ARROW_LEFT:
+    case ARROW_RIGHT:
         editorMoveCursor(c);
         break;
     }
