@@ -64,13 +64,15 @@ typedef struct erow {
 struct editorConfig {
     int cx, cy; // 커서의 위치를 변수
 
-    struct termios orig_termios;
+    struct termios orig_termios;        // 터미널 설정 정보 저장하는 구체
 
-    int screenrows;
-    int screencols;
+    int screenrows;                     // 화면의 줄 수
+    int screencols;                     // 화면의 가로 크기
 
-    int numrows;
-    erow row;                       // editor row 동적으로 할당된 문자 데이터 및 길이에 대한 포인터로 텍스트 줄을 저장 합니다.
+    int numrows;                        // 텍스트의 총 줄 수
+    // erow row;                        // editor row 동적으로 할당된 문자 데이터 및 길이에 대한 포인터로 텍스트 줄을 저장 합니다.
+    erow *row;                          // 한 줄
+
 };
 
 struct editorConfig E;
@@ -318,6 +320,28 @@ int getWindowSize(int *rows, int *cols){
     
 }
 
+/*** row operations ***/
+
+void editorAppendRow(char *s, size_t len){
+
+    // E.row.size = len;
+    // E.row.chars = malloc(len + 1);
+    // memcpy(E.row.chars, s, len);
+    // E.row.chars[len] = '\0';
+    // E.numrows = 1;
+    
+    
+    E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));                     // 새로운 줄을 위한 추가적인 공간 확보
+    int at = E.numrows;                                                         // 새로운 줄의 번호
+
+    // 새로운 줄을 추가
+    E.row[at].size = len;
+    E.row[at].chars = malloc(len + 1);
+    memcpy(E.row[at].chars, s, len);
+    E.row[at].chars[len] = '\0';
+    E.numrows++;
+}
+
 /*** file i/o***/
 
 /*
@@ -335,34 +359,19 @@ void editorOpen(char *filename){
     char *line = NULL;
     size_t linecap = 0;                                     // line capacity
     ssize_t linelen;
-    linelen = getline(&line, &linecap, fp);                 // 파일의 전체 줄의 수를 가져온다
-    if (linelen != -1)
-    {
+    // linelen = getline(&line, &linecap, fp);                 // 파일의 한 줄의 수를 가져온다
+    // if (linelen != -1){
+    while((linelen = getline(&line, &linecap, fp)) != -1){      // 파일에서 한 줄씩 들고 온다.
         // 줄끝에 개행 문자를 빼는 함수
         while (linelen > 0 && (line[linelen - 1] == '\n' || line[linelen - 1] == '\r'))
         {
             linelen--;
         }
 
-
-        E.row.size = linelen;
-        E.row.chars = malloc(linelen + 1);
-        memcpy(E.row.chars, line, linelen);
-        E.row.chars[linelen] = '\0';
-        E.numrows = 1;    
-    } else
-    {
-        free(line);
-        fclose(fp);
-    }
-    
-    
-
-    E.row.size = linelen;
-    E.row.chars = malloc(linelen + 1);
-    memcpy(E.row.chars, line, linelen);
-    E.row.chars[linelen] = '\0';
-    E.numrows = 1;
+        editorAppendRow(line, linelen);  
+    } 
+    free(line);
+    fclose(fp);
 }
 
 
@@ -525,9 +534,11 @@ void editorDrawRows(struct abuf *ab){
             }
         } else{
             // 파일에 있는 문자열을 화면에 표시
-            int len = E.row.size;
+            // int len = E.row.size;
+            int len = E.row[y].size;
             if(len > E.screencols) len = E.screencols;
-            abAppend(ab, E.row.chars, len);
+            // abAppend(ab, E.row.chars, len);
+            abAppend(ab, E.row[y].chars, len);
         }
         
         
@@ -615,6 +626,7 @@ void initEditor(){
     E.cx = 0;
     E.cy = 0;
     E.numrows = 0;
+    E.row = NULL;
 
     /*
     * 화면의 크기를 정보를 받아오는 함수
