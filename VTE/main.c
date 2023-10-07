@@ -18,6 +18,7 @@
 #include <ctype.h>
 #include <sys/ioctl.h>
 #include <string.h>
+#include <sys/types.h>
 
 /*** defines ***/
 #define KILO_VERSION "0.0.1"
@@ -35,7 +36,12 @@ enum editorKey{
     ARROW_LEFT = 1000,  // 1000
     ARROW_RIGHT,        // 1001
     ARROW_UP,           // 1002
-    ARROW_DOWN          // 1003
+    ARROW_DOWN,          // 1003
+    PAGE_UP,
+    PAGE_DOWN,
+    HOME_KEY,
+    END_KEY,
+    DEL_KEY
 };
 
 /*** data ***/
@@ -44,6 +50,12 @@ enum editorKey{
 /*
 * 편집기의 정보를 담는 전역 변수 구조체를 생성
 */
+
+typedef struct erow {
+    int size;
+    char *chars;
+} erow;
+
 struct editorConfig {
     int cx, cy; // 커서의 위치를 변수
 
@@ -51,9 +63,15 @@ struct editorConfig {
 
     int screenrows;
     int screencols;
+
+    int numrows;
+    erow row;                       // editor row 동적으로 할당된 문자 데이터 및 길이에 대한 포인터로 텍스트 줄을 저장 합니다.
 };
 
 struct editorConfig E;
+
+
+
 
 /*** terminal ***/
 
@@ -164,23 +182,53 @@ int editorReadKey(){
         }
 
         if(seq[0] == '['){                          // 이스케이프 문자중 명령 문자이면
-            switch (seq[1])                         // 뒤에 오는 인수에 따라 어떠화살표인지 매칭
-            {
-            // 위 쪽의 enum을 이용하여 변경
-            // case 'A': return 'w';
-            // case 'B': return 's';
-            // case 'C': return 'd';
-            // case 'D': return 'a';
-            case 'A': return ARROW_UP;
-            case 'B': return ARROW_DOWN;
-            case 'C': return ARROW_RIGHT;
-            case 'D': return ARROW_LEFT;
+            if (seq[1] >= '0' && seq[1] <= '9'){
+                if(read(STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
+                if (seq[2] == '~') {
+                    switch (seq[1]) {
+                        case '1': return HOME_KEY;                      //home키와 end키 추가
+                        case '4': return END_KEY;                       // home키는 1,7,H,OH 네가지의 시퀀스를 가진다
+                        case '7': return HOME_KEY;                      // end키도  4, 8, F, OF 네가자의 시퀀스를 가진다.
+                        case '8': return END_KEY;
+
+                        case '5': return PAGE_UP;
+                        case '6': return PAGE_DOWN;
+
+                        case '3': return DEL_KEY;
+                    
+                    default:
+                        break;
+                    }
+                }
+            } else{
+                switch (seq[1]){                         // 뒤에 오는 인수에 따라 어떠화살표인지 매칭
+                    // 위 쪽의 enum을 이용하여 변경
+                    // case 'A': return 'w';
+                    // case 'B': return 's';
+                    // case 'C': return 'd';
+                    // case 'D': return 'a';
+                    case 'A': return ARROW_UP;
+                    case 'B': return ARROW_DOWN;
+                    case 'C': return ARROW_RIGHT;
+                    case 'D': return ARROW_LEFT;
+
+                    case 'H': return HOME_KEY;
+                    case 'F': return END_KEY;
+                }
             }
-        }
-        
+        } else if(seq[0] == 'O'){                           //
+            switch (seq[1]) {
+                case 'H':
+                    return HOME_KEY;
+                case 'F':
+                    return END_KEY;
+                    break;
+                default:
+                    break;
+            }
+        } 
         return '\x1b';
-    }else
-    {
+    } else {
         return c;
     }
     
@@ -265,6 +313,23 @@ int getWindowSize(int *rows, int *cols){
     
 }
 
+/*** file i/o***/
+
+/*
+* 파일에서 문자열을 읽어 오는 함수
+*/
+void editorOpen(){
+    char * line = "Hello, world";
+    ssize_t linelen = 13;
+
+    E.row.size = linelen;
+    E.row.chars = malloc(linelen + 1);
+    memcpy(E.row.chars, line, linelen);
+    E.row.chars[linelen] = '\0';
+    E.numrows = 1;
+}
+
+
 /*** append buffer ***/
 // 이 버퍼는 
 struct abuf
@@ -311,17 +376,27 @@ void editorMoveCursor(int key){
     // case 's':
     //     E.cy++;
     //     break;
+
+
     case ARROW_LEFT:
+    if (E.cx != 0){     // 커서의 위치가 나가지 않도록 범위를 제한
         E.cx--;
+    }
         break;
     case ARROW_RIGHT:
+    if (E.cx != E.screencols - 1){
         E.cx++;
+    }
         break;
     case ARROW_UP:
+    if (E.cy != 0){
         E.cy--;
+    }
         break;
     case ARROW_DOWN:
+    if (E.cy != E.screenrows - 1){
         E.cy++;
+    }
         break;
     }
 }
@@ -354,10 +429,26 @@ void editorProcessKeyPress(){
     case ARROW_RIGHT:
         editorMoveCursor(c);
         break;
+    
+    // page를 올리거나 내리면 마우스 커서를 열심히 옮김
+    case PAGE_UP:
+    case PAGE_DOWN:
+        {   // 변수를 선언하기 위해서
+            int times = E.screenrows;
+            while(times--){
+                editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+            }
+        }
+        break;
+    
+    case HOME_KEY:
+        E.cx = 0;
+        break;
+    case END_KEY:
+        E.cx = E.screencols - 1;
+        break;
     }
 }
-
-
 
 /*** output ***/
 
@@ -371,28 +462,35 @@ void editorDrawRows(struct abuf *ab){
     */
 
     int y;
-    for (y = 0; y < E.screenrows; y++){
-
-        if (y == E.screenrows / 3){
-            char welcome[80];
-            int welcomelen = snprintf(welcome, sizeof(welcome), "Kilo editor -- version %s", KILO_VERSION);
-            if (welcomelen > E.screenrows){
-                welcomelen = E.screencols;
-            }
-            int padding = (E.screencols - welcomelen) / 2;
-            if (padding){
+    for (y = 0; y < E.screenrows; y++){                         // 화면의 줄 수만큼 텍스트를 출럭
+        if (y >= E.numrows) {
+            if (y == E.screenrows / 3){
+                char welcome[80];
+                int welcomelen = snprintf(welcome, sizeof(welcome), "Kilo editor -- version %s", KILO_VERSION);
+                if (welcomelen > E.screenrows){
+                    welcomelen = E.screencols;
+                }
+                int padding = (E.screencols - welcomelen) / 2;
+                if (padding){
+                    abAppend(ab, "~", 1);
+                    padding--;
+                }
+                while (padding--)
+                {
+                    abAppend(ab, " ", 1);
+                }
+                
+                abAppend(ab, welcome, welcomelen);
+            }else{
                 abAppend(ab, "~", 1);
-                padding--;
             }
-            while (padding--)
-            {
-                abAppend(ab, " ", 1);
-            }
-            
-            abAppend(ab, welcome, welcomelen);
-        }else{
-            abAppend(ab, "~", 1);
+        } else{
+            int len = E.row.size;
+            if(len > E.screencols) len = E.screencols;
+            abAppend(ab, E.row.chars, len);
         }
+        
+        
 
 
 
@@ -476,6 +574,7 @@ void initEditor(){
     //  커서위치를 초기화
     E.cx = 0;
     E.cy = 0;
+    E.numrows = 0;
 
     /*
     * 화면의 크기를 정보를 받아오는 함수
@@ -488,6 +587,7 @@ void initEditor(){
 int main(){
     enableRawMode();
     initEditor();
+    editorOpen();
 
     char c;
     // while (1){
